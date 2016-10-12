@@ -28,3 +28,11 @@ class ElasticSearch(object):
         except KeyError:
             logger.error('Unable to get total docs in index.')
             raise
+
+    def get_docs(self, index_name, batch_size):
+        response = self._es.search(index=index_name,
+                                   size=batch_size,
+                                   q='*:*')
+        import ipdb
+        ipdb.set_trace()
+        return response['hits']['hits']
