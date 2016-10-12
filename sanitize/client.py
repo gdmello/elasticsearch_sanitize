@@ -1,6 +1,9 @@
+from collections import deque
 import json
 import logging
 import logging.handlers
+
+
 import elasticsearch
 from elasticsearch import helpers
 
@@ -21,6 +24,8 @@ es_tracer_handler = logging.handlers.RotatingFileHandler('top-camps-full.log',
                                                          maxBytes=0.5 * 10 ** 9,
                                                          backupCount=3)
 es_tracer.addHandler(es_tracer_handler)
+
+DEFAULT_SCROLL_SIZE = '10m'
 
 
 class ElasticSearch(object):
@@ -50,13 +55,29 @@ class ElasticSearch(object):
             logger.error('Unable to get total docs in index.')
             raise
 
-    def get_docs(self, index_name, batch_size):
-        response = helpers.scan(client=self._source_client,
-                                query='{ "query": {"matchAll":{}} }',
-                                scroll='2h',
-                                preserve_order=True,
-                                size=batch_size)
-        return response
+    def get_docs(self, batch_size):
+        response = self._source_client.search(body='{ "query": {"matchAll":{}} }', scroll=DEFAULT_SCROLL_SIZE,
+                                              size=batch_size, search_type='scan')
+        scroll_id = response.get('_scroll_id')
+        response = self._source_client.scroll(scroll_id, scroll=DEFAULT_SCROLL_SIZE)
+        yield response['hits']['hits'], response.get('_scroll_id')
+
+    def get_docs_scroll(self, batch_size):
+        response = self._source_client.search(body='{ "query": {"matchAll":{}} }', scroll=DEFAULT_SCROLL_SIZE,
+                                              size=batch_size, search_type='scan')
+        scroll_id = response.get('_scroll_id')
+        return scroll_id
+
+    def get_scroll(self, scroll_id):
+        """
+        Get the results of a scroll id.
+
+        :param scroll_id:
+        :param scroll:
+        :return: The documents in the scroll and the next scroll id
+        """
+        response = self._source_client.scroll(scroll_id, scroll=DEFAULT_SCROLL_SIZE)
+        return response['hits']['hits'], response.get('_scroll_id')
 
     def clone_index(self, source_index_name, destination_index_name):
         """
@@ -81,9 +102,7 @@ class ElasticSearch(object):
             }
             return json.dumps(destination_index_body)
 
-        source_index_response = self._source_client.indices.get(index=source_index_name,
-                                                                feature=['_settings', '_mappings'],
-                                                                flat_settings=True)
+        source_index_response = self.get_index(index_name=source_index_name)
         destination_index_body = index_body(source_index_name, source_index_response)
 
         try:
@@ -93,3 +112,16 @@ class ElasticSearch(object):
             if 'IndexAlreadyExistsException' not in e.error:
                 raise e
             logger.debug('Destination index already exists.')
+
+    def get_index(self, index_name):
+        return self._source_client.indices.get(index=index_name,
+                                               feature=['_settings', '_mappings'],
+                                               flat_settings=True)
+
+    def bulk_insert(self, results):
+        logger.debug('About to bulk insert.')
+        response = deque(helpers.parallel_bulk(client=self._destination_client, actions=results, chunk_size=1000,
+                                         thread_count=5))
+        import ipdb
+        ipdb.set_trace()
+        print response
