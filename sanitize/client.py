@@ -66,20 +66,25 @@ class ElasticSearch(object):
         :param destination_index_name:
         :return:
         """
+
+        def index_body(source_index_name, source_index_response):
+            mappings = source_index_response[source_index_name]['mappings']
+            settings = source_index_response[source_index_name]['settings']
+            destination_index_body = {
+                "settings": {
+                    "index": {
+                        "number_of_shards": settings['index.number_of_shards'],
+                        "number_of_replicas": settings['index.number_of_replicas']
+                    }
+                },
+                "mappings": mappings
+            }
+            return json.dumps(destination_index_body)
+
         source_index_response = self._source_client.indices.get(index=source_index_name,
                                                                 feature=['_settings', '_mappings'],
                                                                 flat_settings=True)
-        mappings = source_index_response[source_index_name]['mappings']
-        settings = source_index_response[source_index_name]['settings']
-        destination_index_body = {
-            "settings": {
-                "index": {
-                    "number_of_shards": settings['index.number_of_shards'],
-                    "number_of_replicas": settings['index.number_of_replicas']
-                }
-            },
-            "mappings": mappings
-        }
+        destination_index_body = self.index_body(source_index_name, source_index_response)
         response = self._destination_client.indices.create(index=destination_index_name,
-                                                body=json.dumps(destination_index_body))
+                                                           body=destination_index_body)
         print response
