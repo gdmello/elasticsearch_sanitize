@@ -89,5 +89,7 @@ class ElasticSearch(object):
         try:
             return self._destination_client.indices.create(index=destination_index_name,
                                                            body=destination_index_body)
-        except elasticsearch.exceptions.RequestError:
+        except elasticsearch.exceptions.RequestError as e:
+            if 'IndexAlreadyExistsException' not in e.error:
+                raise e
             logger.debug('Destination index already exists.')
