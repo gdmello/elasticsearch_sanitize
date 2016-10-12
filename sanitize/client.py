@@ -84,7 +84,10 @@ class ElasticSearch(object):
         source_index_response = self._source_client.indices.get(index=source_index_name,
                                                                 feature=['_settings', '_mappings'],
                                                                 flat_settings=True)
-        destination_index_body = self.index_body(source_index_name, source_index_response)
-        response = self._destination_client.indices.create(index=destination_index_name,
+        destination_index_body = index_body(source_index_name, source_index_response)
+
+        try:
+            return self._destination_client.indices.create(index=destination_index_name,
                                                            body=destination_index_body)
-        print response
+        except elasticsearch.exceptions.RequestError:
+            logger.debug('Destination index already exists.')
