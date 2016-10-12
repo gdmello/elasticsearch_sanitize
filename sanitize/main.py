@@ -6,22 +6,38 @@ import client
 EsHost = namedtuple('EsHost', 'hostname, index, user, password')
 
 
+def _sanitize(data_dict):
+    """
+    Perform sanitization on the doc using a custom implementation. Left as an exercise to the Reader!
+    Can use a tool like JQ to perform streaming sanitization of data for PCI/ Compliance/ Privacy reasons.
+    :param data_dict:
+    :return:
+    """
+    return data_dict
+
+def _sanitize_and_insert(results, client, index):
+    bulk_insert = []
+    for result in results:
+        result.pop('_score')
+        # sanitize result.pop('_source'), below, before inserting
+        # leaving sanitization as an implementation detail
+        result['doc'] = _sanitize(result.pop('_source')) # rename dict key
+        result['_op_type'] = 'create'
+        result['_index'] = index
+        bulk_insert.append(result)
+    client.bulk_insert(results)
+
+
 def sanitize(source, destination):
-    # Setup workers
-    # Get all the docs in the index size so a percentage can be displayed
     elastic_search_client = client.ElasticSearch((source.user, source.password), source.hostname,
                                                  (destination.user, destination.password), destination.hostname)
     elastic_search_client.clone_index(source_index_name=source.index,
                                       destination_index_name=destination.index)
     total_docs = elastic_search_client.get_total_docs_in_index(index_name='lcp_v2')
 
-    # Create new index, POST, and collect stats
-
-
-
-    # Loop to fetch results in a batch
-    for result in elastic_search_client.get_docs(index_name='lcp_v2', batch_size=2):
-        pass
+    for results, next_scroll_id in elastic_search_client.get_docs(batch_size=200):
+        _sanitize_and_insert(results, elastic_search_client, destination.index)
+        break
     ## For each batch, save batch deets and status in a file
     ## For each batch, assign to a worker process to run jq
     ## For each batch, if a worker process fails to complete, re-run once more, log output
