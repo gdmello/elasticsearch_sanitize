@@ -20,14 +20,19 @@ Requirements
 Installation
 ============
 * Create a virtualenv
+```shell
     mkvirtualenv sanitizer
+```
 * Install requirements
+```shell
     pip install -r requirements.txt
+```
     
 Execute
 =======
 * Run sanitization
+```shell
     $ python sanitize/main.py --user some_user --password some_password \
     --source http://my_elasticsearch_host:9200/ --destination_user dest_user \
-    -- destination_password dest_password \
+    --destination_password dest_password \
     --destination http://my_new_elasticsearch_host:9200/
