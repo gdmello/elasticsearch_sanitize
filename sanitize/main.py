@@ -3,7 +3,7 @@ import argparse
 import client
 
 
-def sanitize((user, password), (destination_user, destination_password), source):
+def sanitize((user, password), (destination_user, destination_password), source, destination):
     # Setup workers
     # Loop to fetch results in a batch
     client.ElasticSearch(('admin', 'password')).get_total_docs_in_index(index_name='lcp_v2')
@@ -23,12 +23,14 @@ def sanitize((user, password), (destination_user, destination_password), source)
 
 def create_parser():
     parser = argparse.ArgumentParser(description='Create an HTTP load balanced configuration.')
-    parser.add_argument('-u', '--user', help='Source ElasticSearch admin username.', required=True)
-    parser.add_argument('-p', '--password', help='Source ElasticSearch admin password.', required=True)
-    parser.add_argument('-s', '--source', help='Source ElasticSearch admin password.',
+    parser.add_argument('-u', '--user', help='Source Elasticsearch admin username.', required=True)
+    parser.add_argument('-p', '--password', help='Source Elasticsearch admin password.', required=True)
+    parser.add_argument('-s', '--source', help='Source Elasticsearch host.',
                         required=True)
-    parser.add_argument('-du', '--destination_user', help='Destination ElasticSearch admin username.', required=True)
-    parser.add_argument('-dp', '--destination_password', help='Destination ElasticSearch admin password.',
+    parser.add_argument('-du', '--destination_user', help='Destination Elasticsearch admin username.', required=True)
+    parser.add_argument('-dp', '--destination_password', help='Destination Elasticsearch admin password.',
+                        required=True)
+    parser.add_argument('-s', '--destination', help='Destination Elasticsearch host in which the new sanitized index will be created.',
                         required=True)
     return parser
 
@@ -41,4 +43,5 @@ if __name__ == '__main__':
     source_credentials = ('user', 'password')
     destination_credentials = ('destination_user', 'destination_password')
     source=args.source
-    sanitize(source_credentials, destination_credentials, source)
+    destination=args.destination
+    sanitize(source_credentials, destination_credentials, source, destination)
