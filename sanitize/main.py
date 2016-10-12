@@ -30,7 +30,7 @@ def create_parser():
     parser.add_argument('-du', '--destination_user', help='Destination Elasticsearch admin username.', required=True)
     parser.add_argument('-dp', '--destination_password', help='Destination Elasticsearch admin password.',
                         required=True)
-    parser.add_argument('-s', '--destination', help='Destination Elasticsearch host in which the new sanitized index will be created.',
+    parser.add_argument('-d', '--destination', help='Destination Elasticsearch host in which the new sanitized index will be created.',
                         required=True)
     return parser
 
