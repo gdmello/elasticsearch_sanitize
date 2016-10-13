@@ -59,7 +59,7 @@ def sanitize(source, destination):
 
 
 def create_parser():
-    parser = argparse.ArgumentParser(description='Create an HTTP load balanced configuration.')
+    parser = argparse.ArgumentParser(description='Sanitize an Elasticsearch index into a new index.')
     parser.add_argument('-u', '--user', help='Source Elasticsearch admin username.', required=True)
     parser.add_argument('-p', '--password', help='Source Elasticsearch admin password.', required=True)
     parser.add_argument('-s', '--source', help='Source Elasticsearch host.', required=True)
