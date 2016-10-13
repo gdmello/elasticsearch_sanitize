@@ -61,12 +61,6 @@ class ElasticSearch(object):
         response = self._source_client.scroll(scroll_id, scroll=DEFAULT_SCROLL_SIZE)
         yield response['hits']['hits'], response.get('_scroll_id')
 
-    def get_docs_scroll(self, batch_size):
-        response = self._source_client.search(body='{ "query": {"matchAll":{}} }', scroll=DEFAULT_SCROLL_SIZE,
-                                              size=batch_size, search_type='scan')
-        scroll_id = response.get('_scroll_id')
-        return scroll_id
-
     def get_scroll(self, scroll_id):
         """
         Get the results of a scroll id.
@@ -87,10 +81,10 @@ class ElasticSearch(object):
         :return:
         """
 
-        def index_body(source_index_name, source_index_response):
-            mappings = source_index_response[source_index_name]['mappings']
-            settings = source_index_response[source_index_name]['settings']
-            destination_index_body = {
+        def index_body(index_name, index_properties_response):
+            mappings = index_properties_response[index_name]['mappings']
+            settings = index_properties_response[index_name]['settings']
+            index_body = {
                 "settings": {
                     "index": {
                         "number_of_shards": settings['index.number_of_shards'],
@@ -99,7 +93,7 @@ class ElasticSearch(object):
                 },
                 "mappings": mappings
             }
-            return json.dumps(destination_index_body)
+            return json.dumps(index_body)
 
         source_index_response = self.get_index(index_name=source_index_name)
         destination_index_body = index_body(source_index_name, source_index_response)
