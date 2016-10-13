@@ -44,12 +44,11 @@ def sanitize(source, destination):
                                       destination_index_name=destination.index)
     total_docs = elastic_search_client.get_total_docs_in_index(index_name='lcp_v2')
     success_docs, failed_docs, processed_docs = 0, 0, 0
-    for results, next_scroll_id in elastic_search_client.get_docs(batch_size=5):
-        total_success_docs, total_failed_docs = _sanitize_and_insert(results, elastic_search_client, destination.index)
-        processed_docs += (total_success_docs + total_failed_docs)
-        failed_docs += (failed_docs + total_failed_docs)
-        success_docs += (success_docs + total_success_docs)
-        break
+    results, next_scroll_id = elastic_search_client.get_docs(batch_size=5)
+    total_success_docs, total_failed_docs = _sanitize_and_insert(results, elastic_search_client, destination.index)
+    processed_docs += (total_success_docs + total_failed_docs)
+    failed_docs += (failed_docs + total_failed_docs)
+    success_docs += (success_docs + total_success_docs)
     ## For each batch, save batch deets and status in a file
     ## For each batch, assign to a worker process to run jq
     ## For each batch, if a worker process fails to complete, re-run once more, log output
