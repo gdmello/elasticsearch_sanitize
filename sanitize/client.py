@@ -1,8 +1,8 @@
 from collections import deque
 import json
-import logging
+import os
 import logging.handlers
-
+import uuid
 
 import elasticsearch
 from elasticsearch import helpers
@@ -120,14 +120,20 @@ class ElasticSearch(object):
 
     def bulk_insert(self, results, record_failures=True):
         logger.debug('About to bulk insert.')
-        responses = deque(helpers.parallel_bulk(client=self._destination_client, actions=results, chunk_size=1000,
-                                         thread_count=5))
-        import ipdb
-        ipdb.set_trace()
+        responses = deque(helpers.parallel_bulk(client=self._destination_client, actions=results, chunk_size=10,
+                                                thread_count=5, raise_on_error=False))
         total_docs_processed = len(responses)
-        failed_docs = 0
+        total_failed_docs = 0
         if record_failures:
-            failures = [response['create']['_id'] for response in responses if response['create']['status'] != '201']
-            failed_docs = len(failures)
-            #TODO - persist failures to file /failures
-        return total_docs_processed - failed_docs, failed_docs
+            total_failed_docs = _write_failures(responses)
+        return total_docs_processed - total_failed_docs, total_failed_docs
+
+
+def _write_failures(responses):
+    failures = [response[1]['create']['_id'] for response in responses if response[1]['create']['status'] != '201']
+    total_failed_docs = len(failures)
+    if not os.path.exists('failures'):
+        os.makedirs('failures')
+    with open('failures/{}.json'.format(uuid.uuid4()), 'w+') as f:
+        f.write(json.dumps(failures))
+    return total_failed_docs
