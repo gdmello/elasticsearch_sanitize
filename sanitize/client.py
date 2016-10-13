@@ -55,11 +55,17 @@ class ElasticSearch(object):
             raise
 
     def get_docs(self, batch_size):
+        """
+        Return a batch of docs using the scroll scan api to avoid loading all docs.
+
+        :param batch_size:
+        :return:
+        """
         response = self._source_client.search(body='{ "query": {"matchAll":{}} }', scroll=DEFAULT_SCROLL_SIZE,
                                               size=batch_size, search_type='scan')
         scroll_id = response.get('_scroll_id')
         response = self._source_client.scroll(scroll_id, scroll=DEFAULT_SCROLL_SIZE)
-        yield response['hits']['hits'], response.get('_scroll_id')
+        return response['hits']['hits'], response.get('_scroll_id')
 
     def get_scroll(self, scroll_id):
         """
