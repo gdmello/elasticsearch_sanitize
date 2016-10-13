@@ -118,10 +118,16 @@ class ElasticSearch(object):
                                                feature=['_settings', '_mappings'],
                                                flat_settings=True)
 
-    def bulk_insert(self, results):
+    def bulk_insert(self, results, record_failures=True):
         logger.debug('About to bulk insert.')
-        response = deque(helpers.parallel_bulk(client=self._destination_client, actions=results, chunk_size=1000,
+        responses = deque(helpers.parallel_bulk(client=self._destination_client, actions=results, chunk_size=1000,
                                          thread_count=5))
         import ipdb
         ipdb.set_trace()
-        print response
+        total_docs_processed = len(responses)
+        failed_docs = 0
+        if record_failures:
+            failures = [response['create']['_id'] for response in responses if response['create']['status'] != '201']
+            failed_docs = len(failures)
+            #TODO - persist failures to file /failures
+        return total_docs_processed - failed_docs, failed_docs
