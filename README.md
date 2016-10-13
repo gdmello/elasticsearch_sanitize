@@ -28,7 +28,7 @@ Installation
     pip install -r requirements.txt
 ```
     
-Execute
+Usage
 =======
 * Run sanitization
 ```shell
