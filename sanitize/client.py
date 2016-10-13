@@ -118,6 +118,12 @@ class ElasticSearch(object):
                                                flat_settings=True)
 
     def bulk_insert(self, results, record_failures=True):
+        """
+        Insert documents in parallel using the bulk api.
+        :param results:
+        :param record_failures:
+        :return: total successful docs, total failed docs
+        """
         logger.debug('About to bulk insert.')
         responses = deque(helpers.parallel_bulk(client=self._destination_client, actions=results, chunk_size=10,
                                                 thread_count=5, raise_on_error=False))
