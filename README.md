@@ -28,12 +28,21 @@ Installation
     pip install -r requirements.txt
 ```
     
-Execute
-=======
+Usage
+=====
 * Run sanitization
 ```shell
     $ python sanitize/main.py --user some_user --password some_password \
     --source http://my_elasticsearch_host:9200/ --destination_user dest_user \
     --destination_password dest_password \
     --destination http://my_new_elasticsearch_host:9200/
+```
+* As a docker container-
+```shell
+$ docker run -v /home/gavin.dmello/new_wk_spc/elasticsearch_sanitize:/sanitize/logs \
+    dev-docker.points.com:elasticsearch_sanitize:0.1 \
+    --source http://my_elasticsearch_host:9200/ --destination_user dest_user \
+    --destination_password dest_password \
+    --destination http://my_new_elasticsearch_host:9200/
+
 ```
