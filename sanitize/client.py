@@ -13,14 +13,14 @@ logger.setLevel(logging.DEBUG)
 es_logger = logging.getLogger('elasticsearch')
 es_logger.setLevel(logging.INFO)
 es_logger_handler = logging.handlers.RotatingFileHandler('logs/elasticsearch-sanitization.log',
-                                                         maxBytes=0.5 * 10 ** 9,
+                                                         maxBytes=0.5 * 10 ** 7,
                                                          backupCount=3)
 es_logger.addHandler(es_logger_handler)
 
 es_tracer = logging.getLogger('elasticsearch.trace')
 es_tracer.setLevel(logging.DEBUG)
 es_tracer_handler = logging.handlers.RotatingFileHandler('logs/elasticsearch-sanitization-trace.log',
-                                                         maxBytes=0.5 * 10 ** 9,
+                                                         maxBytes=0.5 * 10 ** 7,
                                                          backupCount=3)
 es_tracer.addHandler(es_tracer_handler)
 
@@ -64,6 +64,7 @@ class ElasticSearch(object):
         response = self._source_client.search(body='{ "query": {"matchAll":{}} }', scroll=DEFAULT_SCROLL_SIZE,
                                               size=batch_size, search_type='scan')
         scroll_id = response.get('_scroll_id')
+        logger.debug('Scrollid {}'.format(scroll_id))
         response = self._source_client.scroll(scroll_id, scroll=DEFAULT_SCROLL_SIZE)
         return response['hits']['hits'], response.get('_scroll_id')
 
