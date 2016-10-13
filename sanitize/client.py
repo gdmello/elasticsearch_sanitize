@@ -13,14 +13,14 @@ logger.setLevel(logging.DEBUG)
 
 es_logger = logging.getLogger('elasticsearch')
 es_logger.setLevel(logging.INFO)
-es_logger_handler = logging.handlers.RotatingFileHandler('top-camps-base.log',
+es_logger_handler = logging.handlers.RotatingFileHandler('elasticsearch-sanitization.log',
                                                          maxBytes=0.5 * 10 ** 9,
                                                          backupCount=3)
 es_logger.addHandler(es_logger_handler)
 
 es_tracer = logging.getLogger('elasticsearch.trace')
 es_tracer.setLevel(logging.DEBUG)
-es_tracer_handler = logging.handlers.RotatingFileHandler('top-camps-full.log',
+es_tracer_handler = logging.handlers.RotatingFileHandler('elasticsearch-sanitization-trace.log',
                                                          maxBytes=0.5 * 10 ** 9,
                                                          backupCount=3)
 es_tracer.addHandler(es_tracer_handler)
