@@ -1,9 +1,17 @@
+import os
+import shutil
 import argparse
 from collections import namedtuple
 
 import client
 
 EsHost = namedtuple('EsHost', 'hostname, index, user, password')
+
+
+def reset_logs():
+    if os.path.exists('failures'):
+        shutil.rmtree('failures')
+        os.makedirs('failures')
 
 
 def _sanitize(data_dict):
@@ -15,17 +23,18 @@ def _sanitize(data_dict):
     """
     return data_dict
 
+
 def _sanitize_and_insert(results, client, index):
     bulk_insert = []
     for result in results:
         result.pop('_score')
         # sanitize result.pop('_source'), below, before inserting
         # leaving sanitization as an implementation detail
-        result['doc'] = _sanitize(result.pop('_source')) # rename dict key
+        result['doc'] = _sanitize(result.pop('_source'))  # rename dict key
         result['_op_type'] = 'create'
         result['_index'] = index
         bulk_insert.append(result)
-    client.bulk_insert(results)
+    return client.bulk_insert(results)
 
 
 def sanitize(source, destination):
@@ -34,16 +43,16 @@ def sanitize(source, destination):
     elastic_search_client.clone_index(source_index_name=source.index,
                                       destination_index_name=destination.index)
     total_docs = elastic_search_client.get_total_docs_in_index(index_name='lcp_v2')
-
-    for results, next_scroll_id in elastic_search_client.get_docs(batch_size=200):
-        _sanitize_and_insert(results, elastic_search_client, destination.index)
+    success_docs, failed_docs, processed_docs = 0, 0, 0
+    for results, next_scroll_id in elastic_search_client.get_docs(batch_size=5):
+        total_success_docs, total_failed_docs = _sanitize_and_insert(results, elastic_search_client, destination.index)
+        processed_docs += (total_success_docs + total_failed_docs)
+        failed_docs += (failed_docs + total_failed_docs)
+        success_docs += (success_docs + total_success_docs)
         break
     ## For each batch, save batch deets and status in a file
     ## For each batch, assign to a worker process to run jq
     ## For each batch, if a worker process fails to complete, re-run once more, log output
-    # For each worker, parse each doc and construct a bulk API request
-    # For each worker, If any docs fail, create workers/{requestid}.json
-    # For each worker, if success return success response
 
 
     pass
@@ -71,4 +80,5 @@ if __name__ == '__main__':
     source = EsHost(hostname=args.source, index=args.source_index, user=args.user, password=args.password)
     destination = EsHost(hostname=args.destination, index=args.destination_index, user=args.destination_user,
                          password=args.destination_password)
+    reset_logs()
     sanitize(source, destination)

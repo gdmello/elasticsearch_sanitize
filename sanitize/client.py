@@ -132,8 +132,6 @@ class ElasticSearch(object):
 def _write_failures(responses):
     failures = [response[1]['create']['_id'] for response in responses if response[1]['create']['status'] != '201']
     total_failed_docs = len(failures)
-    if not os.path.exists('failures'):
-        os.makedirs('failures')
     with open('failures/{}.json'.format(uuid.uuid4()), 'w+') as f:
         f.write(json.dumps(failures))
     return total_failed_docs
