@@ -12,14 +12,14 @@ logger.setLevel(logging.DEBUG)
 
 es_logger = logging.getLogger('elasticsearch')
 es_logger.setLevel(logging.INFO)
-es_logger_handler = logging.handlers.RotatingFileHandler('elasticsearch-sanitization.log',
+es_logger_handler = logging.handlers.RotatingFileHandler('logs/elasticsearch-sanitization.log',
                                                          maxBytes=0.5 * 10 ** 9,
                                                          backupCount=3)
 es_logger.addHandler(es_logger_handler)
 
 es_tracer = logging.getLogger('elasticsearch.trace')
 es_tracer.setLevel(logging.DEBUG)
-es_tracer_handler = logging.handlers.RotatingFileHandler('elasticsearch-sanitization-trace.log',
+es_tracer_handler = logging.handlers.RotatingFileHandler('logs/elasticsearch-sanitization-trace.log',
                                                          maxBytes=0.5 * 10 ** 9,
                                                          backupCount=3)
 es_tracer.addHandler(es_tracer_handler)
@@ -131,6 +131,6 @@ class ElasticSearch(object):
 def _write_failures(responses):
     failures = [response[1]['create']['_id'] for response in responses if response[1]['create']['status'] != '201']
     total_failed_docs = len(failures)
-    with open('failures/{}.json'.format(uuid.uuid4()), 'w+') as f:
+    with open('logs/failures/{}.json'.format(uuid.uuid4()), 'w+') as f:
         f.write(json.dumps(failures))
     return total_failed_docs

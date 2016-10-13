@@ -9,9 +9,9 @@ EsHost = namedtuple('EsHost', 'hostname, index, user, password')
 
 
 def reset_logs():
-    if os.path.exists('failures'):
-        shutil.rmtree('failures')
-        os.makedirs('failures')
+    if os.path.exists('logs/failures'):
+        shutil.rmtree('logs/failures')
+        os.makedirs('logs/failures')
 
 
 def _sanitize(data_dict):
