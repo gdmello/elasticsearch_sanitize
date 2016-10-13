@@ -36,3 +36,4 @@ Execute
     --source http://my_elasticsearch_host:9200/ --destination_user dest_user \
     --destination_password dest_password \
     --destination http://my_new_elasticsearch_host:9200/
+```
