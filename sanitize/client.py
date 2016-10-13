@@ -84,7 +84,7 @@ class ElasticSearch(object):
         def index_body(index_name, index_properties_response):
             mappings = index_properties_response[index_name]['mappings']
             settings = index_properties_response[index_name]['settings']
-            index_body = {
+            body = {
                 "settings": {
                     "index": {
                         "number_of_shards": settings['index.number_of_shards'],
@@ -93,7 +93,7 @@ class ElasticSearch(object):
                 },
                 "mappings": mappings
             }
-            return json.dumps(index_body)
+            return json.dumps(body)
 
         source_index_response = self.get_index(index_name=source_index_name)
         destination_index_body = index_body(source_index_name, source_index_response)
