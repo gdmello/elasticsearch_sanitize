@@ -1,7 +1,11 @@
+import json
 import os
 import shutil
+import subprocess
 import argparse
 from collections import namedtuple
+
+import pyjq
 
 import client
 
@@ -21,6 +25,43 @@ def _sanitize(data_dict):
     :param data_dict:
     :return:
     """
+    print "="*100
+    json_me = pyjq.first('''def mask(f):
+        with_entries(
+            if .key |in({"cardNumber":null,"cardName":null}) then
+                if .value | type == "number" then
+                    .value |= 0
+                elif .value | type == "string" then
+                    .value |= "***"
+                else
+                    .
+                end
+            else
+                .
+            end
+        );
+    def walk(f):
+      . as $in
+      | if type == "object" then
+          reduce keys[] as $key
+            ( {}; . + { ($key):  ($in[$key] | walk(f)) } ) | f
+      elif type == "array" then map( walk(f) ) | f
+      else f
+      end;
+    del (._attachments) |
+        walk(if type == "object" then
+            mask(.)
+        else
+            .
+        end)''', data_dict)
+    print '>>>>>>>>>>>>>>>>>>>>>> {}'.format(type(json_me))
+    # json_data = json.dumps(data_dict)
+    # # print data_dict
+    # p1 = subprocess.Popen('/app/jsonymous --config /app/config'.split(), stdin=subprocess.PIPE)
+    # # output = subprocess.check_output('echo "{}" | /app/jsonymous --config config'.format(json_data), shell=True)
+    # output = p1.communicate(json_data)
+    # print('test')
+    # print(output)
     return data_dict
 
 
@@ -44,7 +85,7 @@ def sanitize(source, destination):
                                       destination_index_name=destination.index)
     total_docs = elastic_search_client.get_total_docs_in_index(index_name='lcp_v2')
     success_docs, failed_docs, processed_docs = 0, 0, 0
-    results, next_scroll_id = elastic_search_client.get_docs(batch_size=5)
+    results, next_scroll_id = elastic_search_client.get_docs(batch_size=3)
     total_success_docs, total_failed_docs = _sanitize_and_insert(results, elastic_search_client, destination.index)
     processed_docs += (total_success_docs + total_failed_docs)
     failed_docs += (failed_docs + total_failed_docs)
