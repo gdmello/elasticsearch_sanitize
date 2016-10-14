@@ -98,7 +98,7 @@ def _prepare_data(index, results):
     return results
 
 
-MAX_THREADS = 3
+MAX_THREADS = 2
 num_threads = 0
 
 
@@ -147,15 +147,12 @@ def sanitize(source, destination):
     prev_scroll_id = ''
     while (num_threads < MAX_THREADS) and len(results) > 0:
         t = threading.Thread(target=_process, args=(results, elastic_search_client, destination.index, lock))
-        logger.debug('Created new thread results {}'.format(len(results)))
+        # logger.debug('Created new thread results {}'.format(len(results)))
         t.start()
-        logger.debug('Fetching next set of results')
+        # logger.debug('Fetching next set of results')
         results, next_scroll_id = elastic_search_client.get_scroll(scroll_id=next_scroll_id)
-        logger.debug("# of active threads {}".format(num_threads))
+        logger.debug("# of active threads {}, len(results) {}".format(num_threads, len(results)))
 
-    ## For each batch, save batch deets and status in a file
-    ## For each batch, assign to a worker process to run jq
-    ## For each batch, if a worker process fails to complete, re-run once more, log output
     _wait_for_threads_to_complete()
     global success_count, failure_count, processed_docs_count
     logger.debug('Final results: success_count {}, failure_count {}, processed_docs_count {}, num_threads {}'.format(
