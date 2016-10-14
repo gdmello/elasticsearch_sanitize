@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 es_logger = logging.getLogger('elasticsearch')
-es_logger.setLevel(logging.INFO)
+es_logger.setLevel(logging.WARN)
 es_logger_handler = logging.handlers.RotatingFileHandler('logs/elasticsearch-sanitization.log',
                                                          maxBytes=0.5 * 10 ** 7,
                                                          backupCount=3)
@@ -37,6 +37,12 @@ class ElasticSearch(object):
         self._destination_host = destination_host
         self._source_client = elasticsearch.Elasticsearch(hosts=[host])
         self._destination_client = elasticsearch.Elasticsearch(hosts=[destination_host])
+
+    def get_source_client(self):
+        return elasticsearch.Elasticsearch(hosts=[self._host])
+
+    def get_destination_client(self):
+        return elasticsearch.Elasticsearch(hosts=[self._destination_host])
 
     def get_total_docs_in_index(self, index_name):
         """
@@ -126,12 +132,13 @@ class ElasticSearch(object):
         :return: total successful docs, total failed docs
         """
         logger.debug('About to bulk insert.')
-        responses = deque(helpers.parallel_bulk(client=self._destination_client, actions=results, chunk_size=10,
+        responses = deque(helpers.parallel_bulk(client=self.get_destination_client(), actions=results, chunk_size=10,
                                                 thread_count=5, raise_on_error=False))
         total_docs_processed = len(responses)
         total_failed_docs = 0
         if record_failures:
             total_failed_docs = _write_failures(responses)
+            logger.warn('{} Failures encountered.'.format(total_failed_docs))
         return total_docs_processed - total_failed_docs, total_failed_docs
 
 
