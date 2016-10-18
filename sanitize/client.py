@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 es_logger = logging.getLogger('elasticsearch')
-es_logger.setLevel(logging.WARN)
+es_logger.setLevel(logging.INFO)
 es_logger_handler = logging.handlers.RotatingFileHandler('logs/elasticsearch-sanitization.log',
                                                          maxBytes=0.5 * 10 ** 7,
                                                          backupCount=3)
