@@ -9,6 +9,7 @@ import threading
 import pyjq, logging
 
 import client
+import util
 
 EsHost = namedtuple('EsHost', 'hostname, index, user, password')
 
@@ -29,9 +30,7 @@ def reset_logs():
     os.makedirs('logs/failures')
 
 
-import time
-
-success_count, failure_count, processed_docs_count = 0, 0, 0
+success_count, failure_count, processed_docs_count = 0.0, 0.0, 0.0
 
 
 def _sanitize(data_dict):
@@ -41,7 +40,6 @@ def _sanitize(data_dict):
     :param data_dict:
     :return:
     """
-    # print "="*100
     json_me = pyjq.first('''def mask(f):
         with_entries(
             if .key |in({"cardNumber":null,"cardName":null}) then
@@ -69,17 +67,11 @@ def _sanitize(data_dict):
     else
         .
     end)''', data_dict)
-    # print '>>>>>>>>>>>>>>>>>>>>>> {}'.format(type(json_me))
-    # logger.debug(data_dict)
-    # print("About to` jsonify")
 
     # json_data = json.dumps(data_dict)
-    # print("jsonify --- {}".format(time.clock()))
-    # p1 = subprocess.Popen('/home/gavin.dmello/new_wk_spc/jsonymous/jsonymous --config /home/gavin.dmello/new_wk_spc/jsonymous/config'.split(), stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+    # p1 = subprocess.Popen('/app/jsonymous --config /app/config'.split(), stdin=subprocess.PIPE, stdout=subprocess.PIPE)
     # output = p1.communicate(json_data)
-    # print("jsonymous --- {}".format(time.clock()))
-    # print('--- len(dict) {}'.format(len(output[0])))
-    # print(json_me)
+    # return output[0]
     return json_me
 
 
@@ -104,7 +96,7 @@ num_threads = 0
 
 def _process(results, client, index, lock):
     _increment_num_threads(lock)
-    total_success_docs, total_failed_docs = _sanitize_and_insert(results, client, index)
+    total_success_docs, total_failed_docs, _ = _sanitize_and_insert(results, client, index)
     _update_stats(total_failed_docs, total_success_docs, lock)
     _decrement_num_threads(lock)
 
@@ -113,14 +105,14 @@ def _increment_num_threads(lock):
     global num_threads
     with lock:
         num_threads += 1
-        logger.debug("Thread - Increment # of active threads {}".format(num_threads))
+        # logger.debug("Thread - Increment # of active threads {}".format(num_threads))
 
 
 def _decrement_num_threads(lock):
     global num_threads
     with lock:
         num_threads -= 1
-        logger.debug("Thread - Decrement # of active threads {}".format(num_threads))
+        # logger.debug("Thread - Decrement # of active threads {}".format(num_threads))
 
 
 def _update_stats(total_failed_docs, total_success_docs, lock):
@@ -128,36 +120,52 @@ def _update_stats(total_failed_docs, total_success_docs, lock):
     with lock:
         success_count += total_success_docs
         failure_count += total_failed_docs
+
         processed_docs_count += (total_success_docs + total_failed_docs)
+        logger.debug('Processed doc count {}'.format(processed_docs_count))
 
 
-def sanitize(source, destination):
+def sanitize(source, destination, reset_destination=False):
     elastic_search_client = client.ElasticSearch((source.user, source.password), source.hostname,
                                                  (destination.user, destination.password), destination.hostname)
-    elastic_search_client.clone_index(source_index_name=source.index,
-                                      destination_index_name=destination.index)
+    make_destination_index(destination.index, elastic_search_client, source.index, reset_destination)
     total_docs = elastic_search_client.get_total_docs_in_index(index_name='lcp_v2')
-    results, next_scroll_id = elastic_search_client.get_docs(batch_size=100)
-
-    # total_success_docs, total_failed_docs = _sanitize_and_insert(results, elastic_search_client, destination.index)
-    # _update_stats(total_failed_docs, total_success_docs)
+    logger.debug("total_docs {} ".format(total_docs))
+    results, next_scroll_id = elastic_search_client.get_docs(index_name='lcp_v2', batch_size=1000)
 
     lock = threading.RLock()
     global num_threads
     prev_scroll_id = ''
-    while (num_threads < MAX_THREADS) and len(results) > 0:
-        t = threading.Thread(target=_process, args=(results, elastic_search_client, destination.index, lock))
-        # logger.debug('Created new thread results {}'.format(len(results)))
-        t.start()
-        # logger.debug('Fetching next set of results')
-        results, next_scroll_id = elastic_search_client.get_scroll(scroll_id=next_scroll_id)
-        logger.debug("# of active threads {}, len(results) {}".format(num_threads, len(results)))
+    while len(threading.enumerate()) > 0:
+        while (num_threads < MAX_THREADS) and len(results) > 0:
+            t = threading.Thread(target=_process, args=(results, elastic_search_client, destination.index, lock))
+            # logger.debug('Created new thread results {}'.format(len(results)))
+            t.start()
+            # logger.debug('Fetching next set of results')
+            # _process(results, elastic_search_client, destination.index, lock)
+            with util.Timer() as t:
+                results, next_scroll_id = elastic_search_client.get_scroll(scroll_id=next_scroll_id)
+            logger.debug("Get data time elapsed {} ".format(t.secs))
+            logger.debug(
+                "# of active threads {}, len(results) {}, success {}, failures {}, % Completion {}".format(num_threads,
+                                                                                                           len(results),
+                                                                                                           success_count,
+                                                                                                           failure_count,
+                                                                                                           (
+                                                                                                           processed_docs_count / total_docs) * 100))
 
     _wait_for_threads_to_complete()
     global success_count, failure_count, processed_docs_count
     logger.debug('Final results: success_count {}, failure_count {}, processed_docs_count {}, num_threads {}'.format(
         success_count, failure_count, processed_docs_count, num_threads))
     pass
+
+
+def make_destination_index(destination_index, elastic_search_client, source_index, reset_destination):
+    if reset_destination:
+        elastic_search_client.delete_index(index_name=destination_index)
+    elastic_search_client.clone_index(source_index_name=source_index,
+                                      destination_index_name=destination_index,)
 
 
 def _wait_for_threads_to_complete():
@@ -180,6 +188,9 @@ def create_parser():
     parser.add_argument('-d', '--destination',
                         help='Destination Elasticsearch host in which the new sanitized index will be created.',
                         required=True)
+    parser.add_argument('-rd', '--reset_destination',
+                        help='Reset the Destination Elasticsearch index. If it exists it will be deleted first.',
+                        default=False, action="store_true")
     return parser
 
 
@@ -190,4 +201,4 @@ if __name__ == '__main__':
     destination = EsHost(hostname=args.destination, index=args.destination_index, user=args.destination_user,
                          password=args.destination_password)
     reset_logs()
-    sanitize(source, destination)
+    sanitize(source, destination, reset_destination=args.reset_destination)

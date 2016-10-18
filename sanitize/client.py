@@ -116,12 +116,22 @@ class ElasticSearch(object):
         response = self._source_client.scroll(scroll_id, scroll=DEFAULT_SCROLL_SIZE)
         return response['hits']['hits'], response.get('_scroll_id')
 
-    def clone_index(self, source_index_name, destination_index_name):
+    def delete_index(self, index_name):
+        """
+        Delete an index
+
+        :param source_index_name:
+        :return:
+        """
+        return self._destination_client.indices.delete(index=index_name)
+
+    def clone_index(self, source_index_name, destination_index_name, delete_before_create=False):
         """
         Clone an existing index into an Elasticsearch host.
 
         :param source_index_name:
         :param destination_index_name:
+        :param delete_before_create:
         :return:
         """
 
@@ -205,8 +215,8 @@ def _extract_and_total_failures(responses):
         if response[1]['create']['status'] != 201:
             failures.append(response[1]['create']['_id'])
             failure_breakup[response[1]['create']['status']] += 1
-            if response[1]['create']['status'] == 500:
-                logger.error('500 response received - doc id {}'.format(response[1]['create']['_id']))
+            if response[1]['create']['status'] not in [429, 500]:
+                logger.error('Unknown response received - doc id {}'.format(response[1]['create']['_id']))
     for key, value in failure_breakup.iteritems():
         logger.debug('Failure break up {} {}'.format(key, value))
     return failures, failure_breakup
