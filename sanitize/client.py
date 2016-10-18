@@ -2,9 +2,11 @@ from collections import deque, defaultdict
 import json
 import logging.handlers
 import uuid
+import time
 
 import elasticsearch
 from elasticsearch import helpers
+import util
 
 logging.basicConfig()
 logger = logging.getLogger(__name__)
@@ -18,7 +20,7 @@ es_logger_handler = logging.handlers.RotatingFileHandler('logs/elasticsearch-san
 es_logger.addHandler(es_logger_handler)
 
 es_tracer = logging.getLogger('elasticsearch.trace')
-es_tracer.setLevel(logging.DEBUG)
+es_tracer.setLevel(logging.INFO)
 es_tracer_handler = logging.handlers.RotatingFileHandler('logs/elasticsearch-sanitization-trace.log',
                                                          maxBytes=0.5 * 10 ** 7,
                                                          backupCount=3)
@@ -28,6 +30,16 @@ DEFAULT_SCROLL_SIZE = '10m'
 
 
 class ElasticSearch(object):
+    AGGREGATE_BY_TYPE_QUERY = '{ \
+                 "aggs": { \
+                     "count_by_type": { \
+                         "terms": { \
+                             "field": "_type" \
+                         } \
+                     } \
+                 } \
+             }'
+
     def __init__(self, (user, password), host, (destination_user, destination_password), destination_host):
         self._user = user
         self._password = password
@@ -46,29 +58,48 @@ class ElasticSearch(object):
 
     def get_total_docs_in_index(self, index_name):
         """
-        Return the total number of docs in the index based on the 'primaries'.
-        This is to not include replicated docs in the count.
+        Return the total number of docs in the index.
 
         :param index_name:
         :return:
         """
-        response = self._source_client.indices.stats(index=[index_name], metric='docs')
+        response = self._source_client.search(index=index_name, body=self.AGGREGATE_BY_TYPE_QUERY, search_type='count',
+                                              timeout=100, request_timeout=100)
         logger.debug(response)
         try:
-            return response['indices'][index_name]['primaries']['docs']['count']
+            return response['hits']['total']
         except KeyError:
             logger.error('Unable to get total docs in index.')
             raise
 
-    def get_docs(self, batch_size):
+    def get_docs_types_in_index(self, index_name):
+        """
+        Return a list of docs types in the index.
+
+        :param index_name:
+        :return:
+        """
+        response = self._source_client.search(index=index_name, body=self.AGGREGATE_BY_TYPE_QUERY, search_type='count',
+                                              timeout=100, request_timeout=100)
+        logger.debug(response)
+        try:
+            return [item['key'] for item in response['aggregations']['count_by_type']['buckets']]
+        except KeyError:
+            logger.error('Unable to get doc types in index.')
+            raise
+
+    def get_docs(self, index_name, batch_size):
         """
         Return a batch of docs using the scroll scan api to avoid loading all docs.
 
         :param batch_size:
         :return:
         """
-        response = self._source_client.search(body='{ "query": {"matchAll":{}} }', scroll=DEFAULT_SCROLL_SIZE,
-                                              size=batch_size, search_type='scan')
+        match_all_query = '{ "query": {"matchAll":{}} }'
+        doc_types = self.get_docs_types_in_index(index_name)
+        response = self._source_client.search(index=index_name, body=match_all_query, scroll=DEFAULT_SCROLL_SIZE,
+                                              doc_type=doc_types,
+                                              size=batch_size, search_type='scan', timeout=100, request_timeout=100)
         scroll_id = response.get('_scroll_id')
         logger.debug('Scrollid {}'.format(scroll_id))
         response = self._source_client.scroll(scroll_id, scroll=DEFAULT_SCROLL_SIZE)
@@ -122,7 +153,8 @@ class ElasticSearch(object):
     def get_index(self, index_name):
         return self._source_client.indices.get(index=index_name,
                                                feature=['_settings', '_mappings'],
-                                               flat_settings=True)
+                                               flat_settings=True,
+                                               request_timeout=100)
 
     def bulk_insert(self, results, record_failures=True):
         """
@@ -132,7 +164,6 @@ class ElasticSearch(object):
         :return: total successful docs, total failed docs
         """
         # logger.debug('About to bulk insert.')
-        import util
         try:
             with util.Timer() as t:
                 responses = deque(
@@ -140,18 +171,26 @@ class ElasticSearch(object):
                                           thread_count=20, raise_on_error=False, request_timeout=100))
             logger.debug("Bulk insert time elapsed {} ".format(t.secs))
         except Exception as e:
-            print e
-            import ipdb
-            ipdb.set_trace()
+            logger.exception(e)
 
         total_docs_processed = len(responses)
         failures, failure_breakup = _extract_and_total_failures(responses)
         total_failed_docs = len(failures)
+        total_successful_docs = total_docs_processed - total_failed_docs
+
+        RETRYABLE_FAILURES = [429, 500]
+        if set(RETRYABLE_FAILURES).intersection(set(failure_breakup.keys())):
+            retry_results = [item for item in responses if item[1]['create']['status'] in RETRYABLE_FAILURES]
+            time.sleep(5)  # give ES a breather
+            total_retry_success_docs, total_retry_failed_docs, failures = self.bulk_insert(retry_results,
+                                                                                           record_failures=False)
+            total_successful_docs += total_retry_success_docs
+            total_failed_docs = total_retry_failed_docs
 
         if record_failures:
-            _write_failures(responses)
+            _write_failures(failures)
 
-        return total_docs_processed - total_failed_docs, total_failed_docs
+        return total_successful_docs, total_failed_docs, failures
 
 
 def _write_failures(failures):
@@ -167,8 +206,7 @@ def _extract_and_total_failures(responses):
             failures.append(response[1]['create']['_id'])
             failure_breakup[response[1]['create']['status']] += 1
             if response[1]['create']['status'] == 500:
-                import ipdb
-                ipdb.set_trace()
+                logger.error('500 response received - doc id {}'.format(response[1]['create']['_id']))
     for key, value in failure_breakup.iteritems():
         logger.debug('Failure break up {} {}'.format(key, value))
     return failures, failure_breakup
