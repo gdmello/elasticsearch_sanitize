@@ -119,7 +119,10 @@ class ElasticSearch(object):
         :param source_index_name:
         :return:
         """
-        return self._destination_client.indices.delete(index=index_name)
+        try:
+            self._destination_client.indices.delete(index=index_name)
+        except elasticsearch.exceptions.NotFoundError:
+            logger.debug('Index does not exist on host.')
 
     def clone_index(self, source_index_name, destination_index_name, delete_before_create=False):
         """
@@ -170,6 +173,7 @@ class ElasticSearch(object):
         :return: total successful docs, total failed docs
         """
         # logger.debug('About to bulk insert.')
+        responses = []
         try:
             with util.Timer() as t:
                 responses = deque(
@@ -184,7 +188,7 @@ class ElasticSearch(object):
         total_failed_docs = len(failures)
         total_successful_docs = total_docs_processed - total_failed_docs
 
-        RETRYABLE_FAILURES = [429, 500, 400]
+        RETRYABLE_FAILURES = [429, 500]
         if set(RETRYABLE_FAILURES).intersection(set(failure_breakup.keys())):
             retry_results = [item for item in responses if item[1]['create']['status'] in RETRYABLE_FAILURES]
             time.sleep(5)  # give ES a breather
@@ -210,10 +214,14 @@ def _extract_and_total_failures(responses):
     failure_breakup = defaultdict(int)
     for response in responses:
         if response[1]['create']['status'] != 201:
-            failures.append(response[1]['create']['_id'])
+            failures.append(response)
             failure_breakup[response[1]['create']['status']] += 1
             if response[1]['create']['status'] not in [429, 500]:
-                logger.error('Unknown response received - doc id {}'.format(response[1]['create']['_id']))
+                logger.error(
+                    'Unknown response received - doc id {} http response {}'.format(response[1]['create']['_id'],
+                                                                                    response[1]['create'][
+                                                                                        'status']))
+                logger.error(response)
     for key, value in failure_breakup.iteritems():
         logger.debug('Failure break up {} {}'.format(key, value))
     return failures, failure_breakup
