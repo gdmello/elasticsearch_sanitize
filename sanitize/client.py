@@ -1,4 +1,4 @@
-from collections import deque
+from collections import deque, defaultdict
 import json
 import logging.handlers
 import uuid
@@ -131,20 +131,44 @@ class ElasticSearch(object):
         :param record_failures:
         :return: total successful docs, total failed docs
         """
-        logger.debug('About to bulk insert.')
-        responses = deque(helpers.parallel_bulk(client=self.get_destination_client(), actions=results, chunk_size=10,
-                                                thread_count=5, raise_on_error=False))
+        # logger.debug('About to bulk insert.')
+        import util
+        try:
+            with util.Timer() as t:
+                responses = deque(
+                    helpers.parallel_bulk(client=self.get_destination_client(), actions=results, chunk_size=100,
+                                          thread_count=20, raise_on_error=False, request_timeout=100))
+            logger.debug("Bulk insert time elapsed {} ".format(t.secs))
+        except Exception as e:
+            print e
+            import ipdb
+            ipdb.set_trace()
+
         total_docs_processed = len(responses)
-        total_failed_docs = 0
+        failures, failure_breakup = _extract_and_total_failures(responses)
+        total_failed_docs = len(failures)
+
         if record_failures:
-            total_failed_docs = _write_failures(responses)
-            logger.warn('{} Failures encountered.'.format(total_failed_docs))
+            _write_failures(responses)
+
         return total_docs_processed - total_failed_docs, total_failed_docs
 
 
-def _write_failures(responses):
-    failures = [response[1]['create']['_id'] for response in responses if response[1]['create']['status'] != '201']
-    total_failed_docs = len(failures)
+def _write_failures(failures):
     with open('logs/failures/{}.json'.format(uuid.uuid4()), 'w+') as f:
         f.write(json.dumps(failures))
-    return total_failed_docs
+
+
+def _extract_and_total_failures(responses):
+    failures = []
+    failure_breakup = defaultdict(int)
+    for response in responses:
+        if response[1]['create']['status'] != 201:
+            failures.append(response[1]['create']['_id'])
+            failure_breakup[response[1]['create']['status']] += 1
+            if response[1]['create']['status'] == 500:
+                import ipdb
+                ipdb.set_trace()
+    for key, value in failure_breakup.iteritems():
+        logger.debug('Failure break up {} {}'.format(key, value))
+    return failures, failure_breakup
