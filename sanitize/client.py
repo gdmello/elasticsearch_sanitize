@@ -7,24 +7,20 @@ import time
 import elasticsearch
 from elasticsearch import helpers
 import util
+import log
 
-logging.basicConfig()
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+# logging.basicConfig()
+logger = log.get_logger(__name__, logging.DEBUG)
+log.add_console_handler(logger)
+log.add_file_handler(logger, file_path='logs/client.log')
 
 es_logger = logging.getLogger('elasticsearch')
 es_logger.setLevel(logging.INFO)
-es_logger_handler = logging.handlers.RotatingFileHandler('logs/elasticsearch-sanitization.log',
-                                                         maxBytes=0.5 * 10 ** 7,
-                                                         backupCount=3)
-es_logger.addHandler(es_logger_handler)
+log.add_file_handler(es_logger, file_path='logs/elasticsearch-sanitization.log')
 
 es_tracer = logging.getLogger('elasticsearch.trace')
 es_tracer.setLevel(logging.INFO)
-es_tracer_handler = logging.handlers.RotatingFileHandler('logs/elasticsearch-sanitization-trace.log',
-                                                         maxBytes=0.5 * 10 ** 7,
-                                                         backupCount=3)
-es_tracer.addHandler(es_tracer_handler)
+log.add_file_handler(es_tracer, file_path='logs/elasticsearch-sanitization-trace.log')
 
 DEFAULT_SCROLL_SIZE = '10m'
 
@@ -188,10 +184,11 @@ class ElasticSearch(object):
         total_failed_docs = len(failures)
         total_successful_docs = total_docs_processed - total_failed_docs
 
-        RETRYABLE_FAILURES = [429, 500]
+        RETRYABLE_FAILURES = [429, 500, 400]
         if set(RETRYABLE_FAILURES).intersection(set(failure_breakup.keys())):
             retry_results = [item for item in responses if item[1]['create']['status'] in RETRYABLE_FAILURES]
             time.sleep(5)  # give ES a breather
+            logger.debug('Retrying failures.')
             total_retry_success_docs, total_retry_failed_docs, failures = self.bulk_insert(retry_results,
                                                                                            record_failures=False)
             total_successful_docs += total_retry_success_docs

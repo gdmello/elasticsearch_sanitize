@@ -10,18 +10,13 @@ import pyjq, logging
 
 import client
 import util
+import log
 
 EsHost = namedtuple('EsHost', 'hostname, index, user, password')
 
-# logging.basicConfig()
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
-LOG_FORMAT = '%(asctime)s - %(levelname)s - %(message)s'
-consoleHandler = logging.StreamHandler()
-consoleHandler.setLevel(logging.DEBUG)
-formatter = logging.Formatter(LOG_FORMAT)
-consoleHandler.setFormatter(formatter)
-logger.addHandler(consoleHandler)
+logger = log.get_logger(__name__, logging.DEBUG)
+log.add_console_handler(logger)
+log.add_file_handler(logger, file_path='logs/main.log')
 
 
 def reset_logs():
@@ -30,6 +25,8 @@ def reset_logs():
     os.makedirs('logs/failures')
 
 
+MAX_THREADS = 2
+num_threads = 0
 success_count, failure_count, processed_docs_count = 0.0, 0.0, 0.0
 
 
@@ -90,10 +87,6 @@ def _prepare_data(index, results):
     return results
 
 
-MAX_THREADS = 2
-num_threads = 0
-
-
 def _process(results, client, index, lock):
     _increment_num_threads(lock)
     total_success_docs, total_failed_docs, _ = _sanitize_and_insert(results, client, index)
@@ -151,8 +144,7 @@ def sanitize(source, destination, reset_destination=False):
                                                                                                            len(results),
                                                                                                            success_count,
                                                                                                            failure_count,
-                                                                                                           (
-                                                                                                           processed_docs_count / total_docs) * 100))
+                                                                                                           (processed_docs_count / total_docs) * 100))
 
     _wait_for_threads_to_complete()
     global success_count, failure_count, processed_docs_count
@@ -165,7 +157,7 @@ def make_destination_index(destination_index, elastic_search_client, source_inde
     if reset_destination:
         elastic_search_client.delete_index(index_name=destination_index)
     elastic_search_client.clone_index(source_index_name=source_index,
-                                      destination_index_name=destination_index,)
+                                      destination_index_name=destination_index, )
 
 
 def _wait_for_threads_to_complete():
