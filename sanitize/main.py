@@ -1,16 +1,15 @@
+import argparse
 import json
+import logging
 import os
 import shutil
 import subprocess
-import argparse
-from collections import namedtuple
 import threading
-
-import pyjq, logging
+from collections import namedtuple
 
 import client
-import util
 import log
+import util
 
 logger = log.get_logger(__name__, logging.DEBUG)
 log.add_console_handler(logger)
@@ -137,7 +136,8 @@ def sanitize(source, destination, reset_destination=False):
                                                                                                            len(results),
                                                                                                            success_count,
                                                                                                            failure_count,
-                                                                                                           (processed_docs_count / total_docs) * 100))
+                                                                                                           (
+                                                                                                           processed_docs_count / total_docs) * 100))
 
     _wait_for_threads_to_complete()
     global success_count, failure_count, processed_docs_count
@@ -149,8 +149,7 @@ def sanitize(source, destination, reset_destination=False):
 def make_destination_index(destination_index, elastic_search_client, source_index, reset_destination):
     if reset_destination:
         elastic_search_client.delete_index(index_name=destination_index)
-    elastic_search_client.clone_index(source_index_name=source_index,
-                                      destination_index_name=destination_index, )
+    elastic_search_client.clone_index(source_index_name=source_index, destination_index_name=destination_index)
 
 
 def _wait_for_threads_to_complete():
