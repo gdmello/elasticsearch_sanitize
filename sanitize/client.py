@@ -1,15 +1,15 @@
-from collections import deque, defaultdict
 import json
 import logging.handlers
-import uuid
 import time
+import uuid
+from collections import deque, defaultdict
 
 import elasticsearch
 from elasticsearch import helpers
-import util
-import log
 
-# logging.basicConfig()
+import log
+import util
+
 logger = log.get_logger(__name__, logging.DEBUG)
 log.add_console_handler(logger)
 log.add_file_handler(logger, file_path='logs/client.log')
@@ -23,6 +23,8 @@ es_tracer.setLevel(logging.INFO)
 log.add_file_handler(es_tracer, file_path='logs/elasticsearch-sanitization-trace.log')
 
 DEFAULT_SCROLL_SIZE = '10m'
+DEFAULT_TIMEOUT = 100
+RETRYABLE_FAILURES = [429, 500]
 
 
 class ElasticSearch(object):
@@ -60,7 +62,7 @@ class ElasticSearch(object):
         :return:
         """
         response = self._source_client.search(index=index_name, body=self.AGGREGATE_BY_TYPE_QUERY, search_type='count',
-                                              timeout=100, request_timeout=100)
+                                              request_timeout=DEFAULT_TIMEOUT)
         logger.debug(response)
         try:
             return response['hits']['total']
@@ -76,7 +78,7 @@ class ElasticSearch(object):
         :return:
         """
         response = self._source_client.search(index=index_name, body=self.AGGREGATE_BY_TYPE_QUERY, search_type='count',
-                                              timeout=100, request_timeout=100)
+                                              request_timeout=DEFAULT_TIMEOUT)
         logger.debug(response)
         try:
             return [item['key'] for item in response['aggregations']['count_by_type']['buckets']]
@@ -94,11 +96,11 @@ class ElasticSearch(object):
         match_all_query = '{ "query": {"matchAll":{}} }'
         doc_types = self.get_docs_types_in_index(index_name)
         response = self._source_client.search(index=index_name, body=match_all_query, scroll=DEFAULT_SCROLL_SIZE,
-                                              doc_type=doc_types,
-                                              size=batch_size, search_type='scan', timeout=100, request_timeout=100)
+                                              doc_type=doc_types, size=batch_size, search_type='scan',
+                                              request_timeout=DEFAULT_TIMEOUT)
         scroll_id = response.get('_scroll_id')
         logger.debug('Scrollid {}'.format(scroll_id))
-        response = self._source_client.scroll(scroll_id, scroll=DEFAULT_SCROLL_SIZE)
+        response = self._source_client.scroll(scroll_id, scroll=DEFAULT_SCROLL_SIZE, request_timeout=DEFAULT_TIMEOUT)
         return response['hits']['hits'], response.get('_scroll_id')
 
     def get_scroll(self, scroll_id):
@@ -109,7 +111,7 @@ class ElasticSearch(object):
         :param scroll:
         :return: The documents in the scroll and the next scroll id
         """
-        response = self._source_client.scroll(scroll_id, scroll=DEFAULT_SCROLL_SIZE)
+        response = self._source_client.scroll(scroll_id, scroll=DEFAULT_SCROLL_SIZE, request_timeout=DEFAULT_TIMEOUT)
         return response['hits']['hits'], response.get('_scroll_id')
 
     def delete_index(self, index_name):
@@ -124,7 +126,7 @@ class ElasticSearch(object):
         except elasticsearch.exceptions.NotFoundError:
             logger.debug('Index does not exist on host.')
 
-    def clone_index(self, source_index_name, destination_index_name, delete_before_create=False):
+    def clone_index(self, source_index_name, destination_index_name):
         """
         Clone an existing index into an Elasticsearch host.
 
@@ -153,7 +155,8 @@ class ElasticSearch(object):
 
         try:
             return self._destination_client.indices.create(index=destination_index_name,
-                                                           body=destination_index_body)
+                                                           body=destination_index_body,
+                                                           request_timeout=DEFAULT_TIMEOUT)
         except elasticsearch.exceptions.RequestError as e:
             if 'IndexAlreadyExistsException' not in e.error:
                 raise e
@@ -163,7 +166,7 @@ class ElasticSearch(object):
         return self._source_client.indices.get(index=index_name,
                                                feature=['_settings', '_mappings'],
                                                flat_settings=True,
-                                               request_timeout=100)
+                                               request_timeout=DEFAULT_TIMEOUT)
 
     def bulk_insert(self, results, record_failures=True):
         """
@@ -178,7 +181,7 @@ class ElasticSearch(object):
             with util.Timer() as t:
                 responses = deque(
                     helpers.parallel_bulk(client=self.get_destination_client(), actions=results, chunk_size=100,
-                                          thread_count=20, raise_on_error=False, request_timeout=100))
+                                          thread_count=20, raise_on_error=False, request_timeout=DEFAULT_TIMEOUT))
             logger.debug("Bulk insert time elapsed {} ".format(t.secs))
         except Exception as e:
             logger.exception(e)
@@ -188,7 +191,6 @@ class ElasticSearch(object):
         total_failed_docs = len(failures)
         total_successful_docs = total_docs_processed - total_failed_docs
 
-        RETRYABLE_FAILURES = [429, 500]
         if set(RETRYABLE_FAILURES).intersection(set(failure_breakup.keys())):
             retry_results = [item for item in responses if item[1]['create']['status'] in RETRYABLE_FAILURES]
             time.sleep(5)  # give ES a breather
