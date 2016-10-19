@@ -191,7 +191,7 @@ class ElasticSearch(object):
         total_failed_docs = len(failures)
         total_successful_docs = total_docs_processed - total_failed_docs
 
-        if set(RETRYABLE_FAILURES).intersection(set(failure_breakup.keys())):
+        if _can_retry_failures(failure_breakup):
             retry_results = [item for item in responses if item[1]['create']['status'] in RETRYABLE_FAILURES]
             time.sleep(5)  # give ES a breather
             logger.debug('Retrying failures.')
@@ -204,6 +204,10 @@ class ElasticSearch(object):
             _write_failures(failures)
 
         return total_successful_docs, total_failed_docs, failures
+
+
+def _can_retry_failures(failure_breakup):
+    return set(RETRYABLE_FAILURES).intersection(set(failure_breakup.keys()))
 
 
 def _write_failures(failures):
