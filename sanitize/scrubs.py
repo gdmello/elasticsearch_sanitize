@@ -28,15 +28,15 @@ STR_FIELDS_TO_SCRUB = ["cardName",
 INT_FIELDS_TO_SCRUB = ["expirationMonth", "expirationYear"]
 
 
-def scrub(data_dict):
-    json_dict = json.dumps(data_dict)
-    new_json_dict = re.sub(
+def scrub(data):
+    json_data = json.dumps(data)
+    new_json_data = re.sub(
         pattern=r'"({})":.*?"(.+?)"'.format('|'.join(STR_FIELDS_TO_SCRUB)),
         repl=r'"\1": "***"',
-        string=json_dict)
-    new_json_dict = re.sub(
+        string=json_data)
+    new_json_data = re.sub(
         pattern=r'"({})":.*?(\d*).*?,'.format('|'.join(INT_FIELDS_TO_SCRUB)),
         repl=r'"\1": 0,',
-        string=new_json_dict)
+        string=new_json_data)
 
-    return json.loads(new_json_dict)
+    return json.loads(new_json_data)
