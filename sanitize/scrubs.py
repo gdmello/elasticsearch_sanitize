@@ -36,8 +36,8 @@ def scrub(data):
             repl=r'"\1": "***"',
             string=json_data)
         new_json_data = re.sub(
-            pattern=r'"({})":.*?(\d*)'.format('|'.join(INT_FIELDS_TO_SCRUB)),
-            repl=r'"\1": 0',
+            pattern=r'"({})":\s*?(\d*).*?(\n|,)'.format('|'.join(INT_FIELDS_TO_SCRUB)),
+            repl=r'"\1": 0\3',
             string=new_json_data)
         nj = json.loads(new_json_data)
     except Exception as e:
