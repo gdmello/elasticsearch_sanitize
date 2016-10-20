@@ -222,7 +222,7 @@ def _extract_and_total_failures(responses):
         if response[1]['create']['status'] != 201:
             failures.append(response)
             failure_breakup[response[1]['create']['status']] += 1
-            if response[1]['create']['status'] not in [429, 500]:
+            if response[1]['create']['status'] not in [429, 500, 409]:
                 logger.error(
                     'Unknown response received - doc id {} http response {}'.format(response[1]['create']['_id'],
                                                                                     response[1]['create'][
