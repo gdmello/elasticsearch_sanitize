@@ -13,12 +13,10 @@ STR_FIELDS_TO_SCRUB = ["cardName",
                        "firstName",
                        "keyIdentifier",
                        "lastName",
-                       "liveCredentials",
                        "memberId",
                        "organizationName",
                        "password",
                        "phone",
-                       "sandboxCredentials",
                        "sharedSecret",
                        "state",
                        "street1",
@@ -26,15 +24,22 @@ STR_FIELDS_TO_SCRUB = ["cardName",
                        "zip"]
 
 INT_FIELDS_TO_SCRUB = ["expirationMonth", "expirationYear"]
+LIST_FIELDS_TO_SCRUB = ["liveCredentials", "sandboxCredentials"]
 
 
 def scrub(data):
     json_data = json.dumps(data)
+    new_json_data=''
     try:
         new_json_data = re.sub(
-            pattern=r'"({})":.*?"(.*?)"'.format('|'.join(STR_FIELDS_TO_SCRUB)),
+            pattern=r'"({})":\s*?\[(.*?)\].*?(,?)'.format('|'.join(LIST_FIELDS_TO_SCRUB)),
+            repl=r'"\1": ["***"]\3',
+            string=json_data,
+            flags=re.DOTALL)
+        new_json_data = re.sub(
+            pattern=r'"({})":.*?(.*?)'.format('|'.join(STR_FIELDS_TO_SCRUB)),
             repl=r'"\1": "***"',
-            string=json_data)
+            string=new_json_data)
         new_json_data = re.sub(
             pattern=r'"({})":\s*?(\d*).*?(\n|,)'.format('|'.join(INT_FIELDS_TO_SCRUB)),
             repl=r'"\1": 0\3',
@@ -46,3 +51,4 @@ def scrub(data):
         ipdb.set_trace()
 
     return json.loads(new_json_data)
+
