@@ -30,13 +30,19 @@ INT_FIELDS_TO_SCRUB = ["expirationMonth", "expirationYear"]
 
 def scrub(data):
     json_data = json.dumps(data)
-    new_json_data = re.sub(
-        pattern=r'"({})":.*?"(.+?)"'.format('|'.join(STR_FIELDS_TO_SCRUB)),
-        repl=r'"\1": "***"',
-        string=json_data)
-    new_json_data = re.sub(
-        pattern=r'"({})":.*?(\d*).*?,'.format('|'.join(INT_FIELDS_TO_SCRUB)),
-        repl=r'"\1": 0,',
-        string=new_json_data)
+    try:
+        new_json_data = re.sub(
+            pattern=r'"({})":.*?"(.+?)"'.format('|'.join(STR_FIELDS_TO_SCRUB)),
+            repl=r'"\1": "***"',
+            string=json_data)
+        new_json_data = re.sub(
+            pattern=r'"({})":.*?(\d*)'.format('|'.join(INT_FIELDS_TO_SCRUB)),
+            repl=r'"\1": 0',
+            string=new_json_data)
+        nj = json.loads(new_json_data)
+    except Exception as e:
+        print e
+        import ipdb
+        ipdb.set_trace()
 
     return json.loads(new_json_data)
