@@ -310,5 +310,39 @@ def test_handles_trailing_comma():
     eq_(expected_data, scrubs.scrub(data))
 
 
-def test_hanldes_no_trailing_comma():
-    pass
+def test_handles_no_trailing_comma():
+    data = [{"billingInfo": {
+        "expirationMonth": 12,
+        "cardName": "Club Carlson Visa",
+        "street1": "171 John St",
+        "street2": "5th floor",
+        "phone": "4165551234",
+        "expirationYear": 2030,
+        "cardNumber": "XXXXXXXXXXXX1111",
+        "securityCode": "XXX",
+        "city": "Toronto",
+        "zip": "M8V 1S1",
+        "firstName": "John",
+        "country": "GB",
+        "cardType": "AMEX",
+        "state": "XX",
+        "lastName": "Smith"
+    }}]
+    expected_data = [{"billingInfo": {
+        "expirationMonth": 0,
+        "cardName": "***",
+        "street1": "***",
+        "street2": "***",
+        "phone": "***",
+        "expirationYear": 0,
+        "cardNumber": "***",
+        "securityCode": "XXX",
+        "city": "***",
+        "zip": "***",
+        "firstName": "***",
+        "country": "***",
+        "cardType": "***",
+        "state": "***",
+        "lastName": "***"
+    }}]
+    eq_(expected_data, scrubs.scrub(data))
