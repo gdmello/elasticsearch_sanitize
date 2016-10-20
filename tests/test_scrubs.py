@@ -221,6 +221,36 @@ def test_handles_str_fields_with_no_trailing_comma():
     eq_(expected_data_to_anonymize, scrubs.scrub(data_to_anonymize))
 
 
+def test_handles_empty_str_fields_with_trailing_comma():
+    data_to_anonymize = [{"billingInfo": {
+        "expirationMonth": 12,
+        "state": "XX",
+        "lastName": "",
+        "someField": "someValue"
+    }}]
+    expected_data_to_anonymize = [{"billingInfo": {
+        "expirationMonth": 0,
+        "state": "***",
+        "lastName": "***",
+        "someField": "someValue"
+    }}]
+    eq_(expected_data_to_anonymize, scrubs.scrub(data_to_anonymize))
+
+
+def test_handles_empty_str_fields_with_no_trailing_comma():
+    data_to_anonymize = [{"billingInfo": {
+        "expirationMonth": 12,
+        "state": "XX",
+        "lastName": ""
+    }}]
+    expected_data_to_anonymize = [{"billingInfo": {
+        "expirationMonth": 0,
+        "state": "***",
+        "lastName": "***"
+    }}]
+    eq_(expected_data_to_anonymize, scrubs.scrub(data_to_anonymize))
+
+
 def test_handles_int_fields_with_no_trailing_comma():
     data_to_anonymize = [{"billingInfo": {
         "state": "XX",
