@@ -32,7 +32,7 @@ def scrub(data):
     json_data = json.dumps(data)
     try:
         new_json_data = re.sub(
-            pattern=r'"({})":.*?"(.+?)"'.format('|'.join(STR_FIELDS_TO_SCRUB)),
+            pattern=r'"({})":.*?"(.*?)"'.format('|'.join(STR_FIELDS_TO_SCRUB)),
             repl=r'"\1": "***"',
             string=json_data)
         new_json_data = re.sub(
