@@ -1,4 +1,4 @@
-TAG=0.1
+TAG=0.7
 REGISTRY=dev-docker.points.com:80
 REPOSITORY=elasticsearch_sanitize
 
@@ -7,3 +7,4 @@ build:
 
 push:
 	docker push $(REGISTRY)/$(REPOSITORY):$(TAG)
+
