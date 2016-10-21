@@ -29,10 +29,22 @@ Installation
 ```
     
 Usage
-=======
+=====
 * Run sanitization
 ```shell
     $ python sanitize/main.py --user some_user --password some_password \
     --source http://my_elasticsearch_host:9200/ --destination_user dest_user \
     --destination_password dest_password \
     --destination http://my_new_elasticsearch_host:9200/
+```
+* As a docker container-
+```shell
+$ docker run -v /home/user/elasticsearch_sanitize:/sanitize/logs \
+    --dns=192.168.253.2 \
+    dev-docker.points.com:80/elasticsearch_sanitize:0.1 \
+    python /sanitize/main.py \
+    --user admin --password password \
+    --source http://source-elastic-host.company.com:9200/ \
+    --destination_user admin     --destination_password password  \
+    --destination http://destination-elastic-host.company.com:9200/
+```

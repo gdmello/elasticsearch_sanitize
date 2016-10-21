@@ -1,65 +1,148 @@
+import argparse
+import logging
 import os
 import shutil
-import argparse
+import threading
+import uuid
 from collections import namedtuple
 
 import client
+import log
+import scrubs
+import util
+
+logger = log.get_logger(__name__, logging.DEBUG)
+log.add_console_handler(logger)
+log.add_file_handler(logger, file_path='logs/main.log')
 
 EsHost = namedtuple('EsHost', 'hostname, index, user, password')
+max_threads = 0
+num_threads = 0
+success_count, failure_count, processed_docs_count = 0.0, 0.0, 0.0
 
 
 def reset_logs():
-    if os.path.exists('failures'):
-        shutil.rmtree('failures')
-        os.makedirs('failures')
+    if os.path.exists('logs/failures'):
+        shutil.rmtree('logs/failures')
+    os.makedirs('logs/failures')
 
 
-def _sanitize(data_dict):
+def _sanitize(data):
     """
     Perform sanitization on the doc using a custom implementation. Left as an exercise to the Reader!
     Can use a tool like JQ to perform streaming sanitization of data for PCI/ Compliance/ Privacy reasons.
-    :param data_dict:
+    :param data:
     :return:
     """
-    return data_dict
+    try:
+        with util.Timer() as t:
+            scrubbed_results = scrubs.clean(data)
+        logger.debug("Scrub data time elapsed {} ".format(t.secs))
+        return scrubbed_results
+    except Exception as e:
+        client.write_failures(data, file_name='scrub_failures_{}'.format(uuid.uuid4()))
+        logger.exception("Sanitization Error")
+        return None
 
 
 def _sanitize_and_insert(results, client, index):
-    bulk_insert = []
+    results = _prepare_data(index, results)
+    sanitized_results = _sanitize(results)
+    if sanitized_results:
+        return client.bulk_insert(sanitized_results)
+    return 0, len(results)
+
+
+def _prepare_data(index, results):
     for result in results:
         result.pop('_score')
-        # sanitize result.pop('_source'), below, before inserting
-        # leaving sanitization as an implementation detail
-        result['doc'] = _sanitize(result.pop('_source'))  # rename dict key
+        result['doc'] = result.pop('_source')  # rename dict key
         result['_op_type'] = 'create'
         result['_index'] = index
-        bulk_insert.append(result)
-    return client.bulk_insert(results)
+    return results
 
 
-def sanitize(source, destination):
+def _process(results, client, index, lock):
+    _increment_num_threads(lock)
+    total_success_docs, total_failed_docs, _ = _sanitize_and_insert(results, client, index)
+    _update_stats(total_failed_docs, total_success_docs, lock)
+    _decrement_num_threads(lock)
+
+
+def _increment_num_threads(lock):
+    global num_threads
+    with lock:
+        num_threads += 1
+
+
+def _decrement_num_threads(lock):
+    global num_threads
+    with lock:
+        num_threads -= 1
+
+
+def _update_stats(total_failed_docs, total_success_docs, lock):
+    global success_count, failure_count, processed_docs_count
+    with lock:
+        success_count += total_success_docs
+        failure_count += total_failed_docs
+
+        processed_docs_count += (total_success_docs + total_failed_docs)
+        logger.debug('Processed doc count {}'.format(processed_docs_count))
+
+
+def sanitize(source, destination, reset_destination=False):
     elastic_search_client = client.ElasticSearch((source.user, source.password), source.hostname,
                                                  (destination.user, destination.password), destination.hostname)
-    elastic_search_client.clone_index(source_index_name=source.index,
-                                      destination_index_name=destination.index)
+    make_destination_index(destination.index, elastic_search_client, source.index, reset_destination)
     total_docs = elastic_search_client.get_total_docs_in_index(index_name='lcp_v2')
-    success_docs, failed_docs, processed_docs = 0, 0, 0
-    for results, next_scroll_id in elastic_search_client.get_docs(batch_size=5):
-        total_success_docs, total_failed_docs = _sanitize_and_insert(results, elastic_search_client, destination.index)
-        processed_docs += (total_success_docs + total_failed_docs)
-        failed_docs += (failed_docs + total_failed_docs)
-        success_docs += (success_docs + total_success_docs)
-        break
-    ## For each batch, save batch deets and status in a file
-    ## For each batch, assign to a worker process to run jq
-    ## For each batch, if a worker process fails to complete, re-run once more, log output
+    logger.debug("total_docs {} ".format(total_docs))
+    results, next_scroll_id = elastic_search_client.get_docs(index_name='lcp_v2', batch_size=1000)
 
+    lock = threading.RLock()
+    global num_threads
+    while len(results) > 0:
+        while num_threads < max_threads and len(results) > 0:
+            t = threading.Thread(target=_process, args=(results, elastic_search_client, destination.index, lock))
+            t.start()
+            # _process(results, elastic_search_client, destination.index, lock)
+            with util.Timer() as t:
+                results, next_scroll_id = elastic_search_client.get_scroll(scroll_id=next_scroll_id)
+            # current_threads = threading.enumerate()
+            logger.debug("Get data time elapsed {} ".format(t.secs))
+            logger.debug(
+                "# of active threads-{}, len(results)-{}, next_scroll_id-{}, success-{}, failures-{}, total docs-{}, % Completion-{}".format(
+                    num_threads,
+                    len(results),
+                    next_scroll_id,
+                    success_count,
+                    failure_count,
+                    total_docs,
+                    (
+                        processed_docs_count / total_docs) * 100))
+            _wait_for_threads_to_complete()
 
+    global success_count, failure_count, processed_docs_count
+    logger.debug('Final results: success_count {}, failure_count {}, processed_docs_count {}, num_threads {}'.format(
+        success_count, failure_count, processed_docs_count, num_threads))
     pass
 
 
+def make_destination_index(destination_index, elastic_search_client, source_index, reset_destination):
+    if reset_destination:
+        elastic_search_client.delete_index(index_name=destination_index)
+    elastic_search_client.clone_index(source_index_name=source_index, destination_index_name=destination_index)
+
+
+def _wait_for_threads_to_complete():
+    main_thread = threading.currentThread()
+    for t in threading.enumerate():
+        if t is not main_thread:
+            t.join()
+
+
 def create_parser():
-    parser = argparse.ArgumentParser(description='Create an HTTP load balanced configuration.')
+    parser = argparse.ArgumentParser(description='Sanitize an Elasticsearch index into a new index.')
     parser.add_argument('-u', '--user', help='Source Elasticsearch admin username.', required=True)
     parser.add_argument('-p', '--password', help='Source Elasticsearch admin password.', required=True)
     parser.add_argument('-s', '--source', help='Source Elasticsearch host.', required=True)
@@ -71,6 +154,10 @@ def create_parser():
     parser.add_argument('-d', '--destination',
                         help='Destination Elasticsearch host in which the new sanitized index will be created.',
                         required=True)
+    parser.add_argument('-rd', '--reset_destination',
+                        help='Reset the Destination Elasticsearch index. If it exists it will be deleted first.',
+                        default=False, action="store_true")
+    parser.add_argument('-n', '--max_threads', help='Maximum number of threads of execution.', default=2)
     return parser
 
 
@@ -80,5 +167,6 @@ if __name__ == '__main__':
     source = EsHost(hostname=args.source, index=args.source_index, user=args.user, password=args.password)
     destination = EsHost(hostname=args.destination, index=args.destination_index, user=args.destination_user,
                          password=args.destination_password)
+    max_threads = args.max_threads
     reset_logs()
-    sanitize(source, destination)
+    sanitize(source, destination, reset_destination=args.reset_destination)
