@@ -3,8 +3,8 @@ import logging
 import os
 import shutil
 import threading
-from collections import namedtuple
 import uuid
+from collections import namedtuple
 
 import client
 import log
@@ -34,49 +34,15 @@ def _sanitize(data):
     :param data:
     :return:
     """
-    # json_me = pyjq.first('''def mask(f):
-    #     with_entries(
-    #         if .key |in({"cardNumber":null,"cardName":null}) then
-    #             if .value | type == "number" then
-    #                 .value |= 0
-    #             elif .value | type == "string" then
-    #                 .value |= "***"
-    #             else
-    #                 .
-    #             end
-    #         else
-    #             .
-    #         end
-    #     );
-    # def walk(f):
-    #   . as $in
-    #   | if type == "object" then
-    #       reduce keys[] as $key
-    #         ( {}; . + { ($key):  ($in[$key] | walk(f)) } ) | f
-    #   elif type == "array" then map( walk(f) ) | f
-    #   else f
-    #   end;
-    # walk(if type == "object" then
-    #     del (._attachments) | mask(.)
-    # else
-    #     .
-    # end)''', data_dict)
-    # return json_me
-
     try:
         with util.Timer() as t:
-            scrubbed_results = scrubs.scrub(data)
+            scrubbed_results = scrubs.clean(data)
         logger.debug("Scrub data time elapsed {} ".format(t.secs))
         return scrubbed_results
     except Exception as e:
         client.write_failures(data, file_name='scrub_failures_{}'.format(uuid.uuid4()))
-        logger.exception("", e)
+        logger.exception("Sanitization Error")
         return None
-
-    # json_data = json.dumps(data_dict)
-    # p1 = subprocess.Popen('/app/jsonymous --config /app/config'.split(), stdin=subprocess.PIPE, stdout=subprocess.PIPE)
-    # output = p1.communicate(json_data)
-    # return json.loads(output[0])
 
 
 def _sanitize_and_insert(results, client, index):
@@ -135,15 +101,11 @@ def sanitize(source, destination, reset_destination=False):
 
     lock = threading.RLock()
     global num_threads
-    # current_threads = [t for t in threading.enumerate() if t is not threading.currentThread()]
-    # import ipdb
-    # ipdb.set_trace()
-    # while len(current_threads) > 0:
     while len(results) > 0:
         while num_threads < max_threads and len(results) > 0:
-            # t = threading.Thread(target=_process, args=(results, elastic_search_client, destination.index, lock))
-            # t.start()
-            _process(results, elastic_search_client, destination.index, lock)
+            t = threading.Thread(target=_process, args=(results, elastic_search_client, destination.index, lock))
+            t.start()
+            # _process(results, elastic_search_client, destination.index, lock)
             with util.Timer() as t:
                 results, next_scroll_id = elastic_search_client.get_scroll(scroll_id=next_scroll_id)
             # current_threads = threading.enumerate()
@@ -158,11 +120,8 @@ def sanitize(source, destination, reset_destination=False):
                     total_docs,
                     (
                         processed_docs_count / total_docs) * 100))
-            # current_threads = [t for t in threading.enumerate() if t is not threading.currentThread()]
-            # logger.debug(current_threads)
-        # _wait_for_threads_to_complete()
+            _wait_for_threads_to_complete()
 
-    # _wait_for_threads_to_complete()
     global success_count, failure_count, processed_docs_count
     logger.debug('Final results: success_count {}, failure_count {}, processed_docs_count {}, num_threads {}'.format(
         success_count, failure_count, processed_docs_count, num_threads))
