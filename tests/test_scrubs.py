@@ -1,5 +1,3 @@
-import json
-
 from nose.tools import eq_
 
 from sanitize import scrubs
@@ -191,39 +189,23 @@ def test_scrub():
     eq_(expected_data, scrubs.scrub(data))
 
 
-def test_handles_str_fields_with_trailing_comma():
+def test_handles_str_fields():
     data_to_anonymize = [{"billingInfo": {
         "expirationMonth": 12,
         "state": "XX",
         "lastName": "Smith",
-        "someField": "someValue"
+        "firstName": "someValue"
     }}]
     expected_data_to_anonymize = [{"billingInfo": {
         "expirationMonth": 0,
         "state": "***",
         "lastName": "***",
-        "someField": "someValue"
+        "firstName": "***"
     }}]
-    eq_(expected_data_to_anonymize, scrubs.scrub(data_to_anonymize))
+    eq_(expected_data_to_anonymize, scrubs.clean(data_to_anonymize))
 
 
-def test_handles_str_fields_with_no_trailing_comma():
-    data_to_anonymize = [{"billingInfo": {
-        "expirationMonth": 12,
-        "cardType": "AMEX",
-        "state": "XX",
-        "lastName": "Smith"
-    }}]
-    expected_data_to_anonymize = [{"billingInfo": {
-        "expirationMonth": 0,
-        "cardType": "***",
-        "state": "***",
-        "lastName": "***"
-    }}]
-    eq_(expected_data_to_anonymize, scrubs.scrub(data_to_anonymize))
-
-
-def test_handles_empty_str_fields_with_trailing_comma():
+def test_handles_empty_str_fields():
     data_to_anonymize = [{"billingInfo": {
         "expirationMonth": 12,
         "state": "XX",
@@ -239,21 +221,7 @@ def test_handles_empty_str_fields_with_trailing_comma():
     eq_(expected_data_to_anonymize, scrubs.scrub(data_to_anonymize))
 
 
-def test_handles_empty_str_fields_with_no_trailing_comma():
-    data_to_anonymize = [{"billingInfo": {
-        "expirationMonth": 12,
-        "state": "XX",
-        "lastName": ""
-    }}]
-    expected_data_to_anonymize = [{"billingInfo": {
-        "expirationMonth": 0,
-        "state": "***",
-        "lastName": "***"
-    }}]
-    eq_(expected_data_to_anonymize, scrubs.scrub(data_to_anonymize))
-
-
-def test_handles_int_fields_with_no_trailing_comma():
+def test_handles_int_fields():
     data_to_anonymize = [{"billingInfo": {
         "state": "XX",
         "lastName": "Smith",
@@ -265,20 +233,6 @@ def test_handles_int_fields_with_no_trailing_comma():
         "lastName": "***",
         "expirationMonth": 0,
         "someField": "someValue"
-    }}]
-    eq_(expected_data_to_anonymize, scrubs.scrub(data_to_anonymize))
-
-
-def test_handles_int_fields_with_trailing_comma():
-    data_to_anonymize = [{"billingInfo": {
-        "state": "XX",
-        "lastName": "Smith",
-        "expirationMonth": 12
-    }}]
-    expected_data_to_anonymize = [{"billingInfo": {
-        "state": "***",
-        "lastName": "***",
-        "expirationMonth": 0
     }}]
     eq_(expected_data_to_anonymize, scrubs.scrub(data_to_anonymize))
 
@@ -295,31 +249,3 @@ def test_handles_empty_credentials():
         "name": "ConsoleE2EApp1cqchc06nf",
         "liveCredentials": ["***"], }]
     eq_(expected_data_to_anonymize, scrubs.scrub(data_to_anonymize))
-
-
-def test_handles_():
-    data_to_anonymize = json.loads('''[{
-        "sandboxCredentials": [
-            "http://BASE_URL_PLACEHOLDER-3dfd2e87-126f-47af-a0aa-3761316a0496.com/123"
-        ],
-        "clientIpAddress": null,
-        "clientUserAgent": null }]''')
-    expected_data_to_anonymize = [{
-        "sandboxCredentials": ["***"],
-        "clientIpAddress": "***",
-        "clientUserAgent": "***"}]
-    eq_(expected_data_to_anonymize, scrubs.scrub(data_to_anonymize))
-
-# def test_test():
-#     with open('logs/failures/scrub_failures_12a165ca-7efc-4ef8-8998-dac4d84ca92f.json', 'r') as f:
-#         data = f.read()
-#     import json
-#     import ipdb
-#     ipdb.set_trace()
-#     json_data = json.loads(data)
-#     for item in json_data:
-#         try:
-#             scrubs.scrub(item)
-#         except Exception as e:
-#             ipdb.set_trace()
-#             print json.dumps(item)
