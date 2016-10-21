@@ -1,14 +1,14 @@
 import argparse
-import json
 import logging
 import os
 import shutil
-import subprocess
 import threading
 from collections import namedtuple
+import uuid
 
 import client
 import log
+import scrubs
 import util
 
 logger = log.get_logger(__name__, logging.DEBUG)
@@ -27,11 +27,11 @@ def reset_logs():
     os.makedirs('logs/failures')
 
 
-def _sanitize(data_dict):
+def _sanitize(data):
     """
     Perform sanitization on the doc using a custom implementation. Left as an exercise to the Reader!
     Can use a tool like JQ to perform streaming sanitization of data for PCI/ Compliance/ Privacy reasons.
-    :param data_dict:
+    :param data:
     :return:
     """
     # json_me = pyjq.first('''def mask(f):
@@ -63,16 +63,28 @@ def _sanitize(data_dict):
     # end)''', data_dict)
     # return json_me
 
-    json_data = json.dumps(data_dict)
-    p1 = subprocess.Popen('/app/jsonymous --config /app/config'.split(), stdin=subprocess.PIPE, stdout=subprocess.PIPE)
-    output = p1.communicate(json_data)
-    return json.loads(output[0])
+    try:
+        with util.Timer() as t:
+            scrubbed_results = scrubs.scrub(data)
+        logger.debug("Scrub data time elapsed {} ".format(t.secs))
+        return scrubbed_results
+    except Exception as e:
+        client.write_failures(data, file_name='scrub_failures_{}'.format(uuid.uuid4()))
+        logger.exception("", e)
+        return None
+
+    # json_data = json.dumps(data_dict)
+    # p1 = subprocess.Popen('/app/jsonymous --config /app/config'.split(), stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+    # output = p1.communicate(json_data)
+    # return json.loads(output[0])
 
 
 def _sanitize_and_insert(results, client, index):
     results = _prepare_data(index, results)
-    results = _sanitize(results)
-    return client.bulk_insert(results)
+    sanitized_results = _sanitize(results)
+    if sanitized_results:
+        return client.bulk_insert(sanitized_results)
+    return 0, len(results)
 
 
 def _prepare_data(index, results):
@@ -123,23 +135,34 @@ def sanitize(source, destination, reset_destination=False):
 
     lock = threading.RLock()
     global num_threads
-    while len(threading.enumerate()) > 0:
-        while (num_threads < max_threads) and len(results) > 0:
-            t = threading.Thread(target=_process, args=(results, elastic_search_client, destination.index, lock))
-            t.start()
-            # _process(results, elastic_search_client, destination.index, lock)
+    # current_threads = [t for t in threading.enumerate() if t is not threading.currentThread()]
+    # import ipdb
+    # ipdb.set_trace()
+    # while len(current_threads) > 0:
+    while len(results) > 0:
+        while num_threads < max_threads and len(results) > 0:
+            # t = threading.Thread(target=_process, args=(results, elastic_search_client, destination.index, lock))
+            # t.start()
+            _process(results, elastic_search_client, destination.index, lock)
             with util.Timer() as t:
                 results, next_scroll_id = elastic_search_client.get_scroll(scroll_id=next_scroll_id)
+            # current_threads = threading.enumerate()
             logger.debug("Get data time elapsed {} ".format(t.secs))
             logger.debug(
-                "# of active threads-{}, len(results)-{}, success-{}, failures-{}, % Completion-{}".format(num_threads,
-                                                                                                           len(results),
-                                                                                                           success_count,
-                                                                                                           failure_count,
-                                                                                                           (
-                                                                                                           processed_docs_count / total_docs) * 100))
+                "# of active threads-{}, len(results)-{}, next_scroll_id-{}, success-{}, failures-{}, total docs-{}, % Completion-{}".format(
+                    num_threads,
+                    len(results),
+                    next_scroll_id,
+                    success_count,
+                    failure_count,
+                    total_docs,
+                    (
+                        processed_docs_count / total_docs) * 100))
+            # current_threads = [t for t in threading.enumerate() if t is not threading.currentThread()]
+            # logger.debug(current_threads)
+        # _wait_for_threads_to_complete()
 
-    _wait_for_threads_to_complete()
+    # _wait_for_threads_to_complete()
     global success_count, failure_count, processed_docs_count
     logger.debug('Final results: success_count {}, failure_count {}, processed_docs_count {}, num_threads {}'.format(
         success_count, failure_count, processed_docs_count, num_threads))
