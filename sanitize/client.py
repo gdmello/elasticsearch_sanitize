@@ -201,7 +201,7 @@ class ElasticSearch(object):
             total_failed_docs = total_retry_failed_docs
 
         if record_failures:
-            _write_failures(failures)
+            write_failures(failures)
 
         return total_successful_docs, total_failed_docs, failures
 
@@ -210,8 +210,8 @@ def _can_retry_failures(failure_breakup):
     return set(RETRYABLE_FAILURES).intersection(set(failure_breakup.keys()))
 
 
-def _write_failures(failures):
-    with open('logs/failures/{}.json'.format(uuid.uuid4()), 'w+') as f:
+def write_failures(failures, file_name=None):
+    with open('logs/failures/{}.json'.format(file_name or uuid.uuid4()), 'w+') as f:
         f.write(json.dumps(failures))
 
 
