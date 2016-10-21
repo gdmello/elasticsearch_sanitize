@@ -35,7 +35,7 @@ def scrub(data):
         string=json_data,
         flags=re.DOTALL)
     new_json_data = re.sub(
-        pattern=r'"({})":.*?(".*?")'.format('|'.join(STR_FIELDS_TO_SCRUB)),
+        pattern=r'"({})":\s*?((".*?")|(null))'.format('|'.join(STR_FIELDS_TO_SCRUB)),
         repl=r'"\1": "***"',
         string=new_json_data)
     new_json_data = re.sub(
