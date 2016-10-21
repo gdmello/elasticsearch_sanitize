@@ -39,12 +39,12 @@ Usage
 ```
 * As a docker container-
 ```shell
-$ docker run -v /home/gavin.dmello/new_wk_spc/elasticsearch_sanitize:/sanitize/logs \
+$ docker run -v /home/user/elasticsearch_sanitize:/sanitize/logs \
     --dns=192.168.253.2 \
     dev-docker.points.com:80/elasticsearch_sanitize:0.1 \
     python /sanitize/main.py \
     --user admin --password password \
-    --source http://elastic-aws-ft-1.lxc.points.com:9200/ \
+    --source http://source-elastic-host.company.com:9200/ \
     --destination_user admin     --destination_password password  \
-    --destination http://elastic-aws-ft-1.lxc.points.com:9200/
+    --destination http://destination-elastic-host.company.com:9200/
 ```
